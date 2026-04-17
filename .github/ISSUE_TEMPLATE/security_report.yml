@@ -1,0 +1,38 @@
+name: Security report
+description: Report a potential security issue
+labels: [security]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ⚠️ Security reports in issues are visible to repository collaborators.
+
+        If your report includes sensitive details, do not post exploit code or secrets.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      placeholder: Describe the potential vulnerability.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Potential impact
+      placeholder: What could an attacker do with this issue?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction details
+      description: Minimal steps, affected components, and versions.
+    validations:
+      required: true
+  - type: checkboxes
+    id: acknowledgment
+    attributes:
+      label: Acknowledgment
+      options:
+        - label: I understand this report may be mirrored to internal repositories for triage.
+          required: true

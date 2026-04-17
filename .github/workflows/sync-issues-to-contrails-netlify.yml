@@ -1,0 +1,68 @@
+name: Sync issues to contrails-netlify
+
+on:
+  issues:
+    types: [opened, edited, reopened, closed, labeled, unlabeled]
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: sync-issue-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure sync token exists
+        run: test -n "${{ secrets.CONTRAILS_SYNC_TOKEN }}"
+
+      - name: Mirror issue to contrails-netlify
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.CONTRAILS_SYNC_TOKEN }}
+          script: |
+            const targetOwner = 'goldjg';
+            const targetRepo = 'contrails-netlify';
+
+            const source = context.payload.issue;
+            const marker = `<!-- mirrored-from: ${context.repo.owner}/${context.repo.repo}#${source.number} -->`;
+            const mirroredBody = [
+              `_Mirrored from ${source.html_url}_`,
+              marker,
+              '',
+              source.body || '_No details provided._'
+            ].join('\n');
+
+            const targetIssues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: targetOwner,
+              repo: targetRepo,
+              state: 'all',
+              per_page: 100
+            });
+
+            const existing = targetIssues.find((issue) => (issue.body || '').includes(marker));
+
+            let mirroredIssueNumber;
+            if (!existing) {
+              const created = await github.rest.issues.create({
+                owner: targetOwner,
+                repo: targetRepo,
+                title: source.title,
+                body: mirroredBody
+              });
+              mirroredIssueNumber = created.data.number;
+            } else {
+              mirroredIssueNumber = existing.number;
+            }
+
+            await github.rest.issues.update({
+              owner: targetOwner,
+              repo: targetRepo,
+              issue_number: mirroredIssueNumber,
+              title: source.title,
+              body: mirroredBody,
+              state: source.state
+            });
