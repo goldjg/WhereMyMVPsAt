@@ -59,7 +59,7 @@ jobs:
                   name: label.name
                 });
               } catch (error) {
-                if (error.status !== 404) {
+                if (error?.status !== 404) {
                   throw error;
                 }
 
@@ -72,7 +72,7 @@ jobs:
                     description: label.description
                   });
                 } catch (createError) {
-                  if (createError.status !== 422) {
+                  if (createError?.status !== 422) {
                     throw createError;
                   }
                 }
@@ -89,16 +89,24 @@ jobs:
                 labels: sourceLabels.map((label) => label.name)
               });
               mirroredIssueNumber = created.data.number;
+
+              if (source.state === 'closed') {
+                await github.rest.issues.update({
+                  owner: targetOwner,
+                  repo: targetRepo,
+                  issue_number: mirroredIssueNumber,
+                  state: 'closed'
+                });
+              }
             } else {
               mirroredIssueNumber = existing.number;
+              await github.rest.issues.update({
+                owner: targetOwner,
+                repo: targetRepo,
+                issue_number: mirroredIssueNumber,
+                title: source.title,
+                body: mirroredBody,
+                state: source.state,
+                labels: sourceLabels.map((label) => label.name)
+              });
             }
-
-            await github.rest.issues.update({
-              owner: targetOwner,
-              repo: targetRepo,
-              issue_number: mirroredIssueNumber,
-              title: source.title,
-              body: mirroredBody,
-              state: source.state,
-              labels: sourceLabels.map((label) => label.name)
-            });
