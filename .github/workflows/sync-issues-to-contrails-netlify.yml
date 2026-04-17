@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: sync-issue-${{ github.event.issue.number }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   sync:
@@ -29,6 +29,14 @@ jobs:
 
             const source = context.payload.issue;
             const marker = `<!-- mirrored-from: ${context.repo.owner}/${context.repo.repo}#${source.number} -->`;
+            const sourceLabels = source.labels
+              .map((label) => typeof label === 'string' ? { name: label, color: 'ededed' } : label)
+              .filter((label) => label && label.name)
+              .map((label) => ({
+                name: label.name,
+                color: label.color || 'ededed',
+                description: label.description || undefined
+              }));
             const mirroredBody = [
               `_Mirrored from ${source.html_url}_`,
               marker,
@@ -36,14 +44,40 @@ jobs:
               source.body || '_No details provided._'
             ].join('\n');
 
-            const targetIssues = await github.paginate(github.rest.issues.listForRepo, {
-              owner: targetOwner,
-              repo: targetRepo,
-              state: 'all',
-              per_page: 100
+            const search = await github.rest.search.issuesAndPullRequests({
+              q: `repo:${targetOwner}/${targetRepo} is:issue in:body "${marker}"`,
+              per_page: 1
             });
 
-            const existing = targetIssues.find((issue) => (issue.body || '').includes(marker));
+            const existing = search.data.items.find((issue) => !issue.pull_request);
+
+            for (const label of sourceLabels) {
+              try {
+                await github.rest.issues.getLabel({
+                  owner: targetOwner,
+                  repo: targetRepo,
+                  name: label.name
+                });
+              } catch (error) {
+                if (error.status !== 404) {
+                  throw error;
+                }
+
+                try {
+                  await github.rest.issues.createLabel({
+                    owner: targetOwner,
+                    repo: targetRepo,
+                    name: label.name,
+                    color: label.color,
+                    description: label.description
+                  });
+                } catch (createError) {
+                  if (createError.status !== 422) {
+                    throw createError;
+                  }
+                }
+              }
+            }
 
             let mirroredIssueNumber;
             if (!existing) {
@@ -51,7 +85,8 @@ jobs:
                 owner: targetOwner,
                 repo: targetRepo,
                 title: source.title,
-                body: mirroredBody
+                body: mirroredBody,
+                labels: sourceLabels.map((label) => label.name)
               });
               mirroredIssueNumber = created.data.number;
             } else {
@@ -64,5 +99,6 @@ jobs:
               issue_number: mirroredIssueNumber,
               title: source.title,
               body: mirroredBody,
-              state: source.state
+              state: source.state,
+              labels: sourceLabels.map((label) => label.name)
             });
